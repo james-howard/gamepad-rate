@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Gamepad Update Rate Test</title>
+    <style>
+        body {
+            font-family: system, sans-serif;
+        }
+        blockquote {
+            font-style: italic;
+            border-left: 1px solid blue;
+            padding-left: 10px;
+            margin-left: 0px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gamepad Update Rate</h1>
+    <p>
+        This page tests the update rate of an attached gamepad. Move the sticks rapidly to generate data.
+    </p>
+    
+    <textarea readonly id="output" rows="10" cols="120" wrap="hard" style="font-family: monospace;">
+No gamepads connected.
+    </textarea>
+</body>
+<script language="javascript">
+window.state = {
+    gamepads: [],
+    snapshots: [],
+    errors: 0,
+    updates: [],
+    start: performance.now()
+};
+function cmp(a, b) {
+    if (a.length != b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] != b[i]) return false;
+    }
+    return true;
+}
+class GamepadSnapshot {
+    constructor(gamepad) {
+        this.timestamp = gamepad.timestamp;
+        this.buttons = Array.from(gamepad.buttons).map(x => x.pressed ? 1 : 0);
+        this.axes = Array.from(gamepad.axes);
+    }
+    toString() {
+        return `${this.timestamp} axes: ${this.axes.map(x => x.toFixed(3)).join(", ")} buttons: ${this.buttons.join(", ")}`;
+    }
+    equalTo(rhs) {
+        return cmp(this.axes, rhs.axes) && cmp(this.buttons, rhs.buttons);
+    }
+}
+function tick() {
+    let gamepads = navigator.getGamepads();
+    let lines = [];
+    for (let i = 0; i < gamepads.length; i++) {
+        let prevSnap = state.snapshots[i];
+        let prevPadSnap = state.gamepads[i] ? new GamepadSnapshot(state.gamepads[i]) : null;
+        let curPad = gamepads[i];
+        let curSnap = gamepads[i] ? new GamepadSnapshot(gamepads[i]) : null;
+        
+        state.gamepads[i] = curPad;
+        state.snapshots[i] = curSnap;
+        
+        if (curSnap && prevSnap && prevPadSnap && !curSnap.equalTo(prevSnap)) {
+            if (!state.updates[i]) state.updates[i] = 1;
+            else state.updates[i]++;
+        }        
+    }
+    let now = performance.now();
+    let dt = now - state.start;
+    if (dt > 1000.0) {
+        state.start = now;
+        for (let i = 0; i < gamepads.length; i++) {
+            if (state.gamepads[i]) {
+                let updatesPerS = (state.updates[i] || 0) / (dt / 1000.0);
+                lines.push(`${i} - ${state.gamepads[i].id} - ${updatesPerS} updates/s`);
+                state.updates[i] = 0;
+            }
+        }
+    }
+    
+    if (lines.length) {
+        document.getElementById('output').value = `${navigator.userAgent}\n${lines.join('\n')}`;
+    }
+    requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+</html>
